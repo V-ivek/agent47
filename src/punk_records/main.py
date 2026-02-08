@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from punk_records.api.events import router as events_router
 from punk_records.api.health import router as health_router
+from punk_records.api.memory import router as memory_router
 from punk_records.config import Settings
 from punk_records.kafka.consumer import EventConsumer
 from punk_records.kafka.producer import EventProducer
@@ -80,6 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(events_router)
     app.include_router(health_router)
+    app.include_router(memory_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
