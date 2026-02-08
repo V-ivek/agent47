@@ -16,9 +16,11 @@ class EventConsumer:
         topic: str,
         group_id: str,
         event_store: EventStore,
+        projection_engine=None,
     ):
         self._topic = topic
         self._event_store = event_store
+        self._projection_engine = projection_engine
         self._consumer = AIOKafkaConsumer(
             topic,
             bootstrap_servers=brokers,
@@ -62,11 +64,23 @@ class EventConsumer:
                 try:
                     inserted = await self._event_store.persist(event)
                     if inserted:
-                        logger.info("Persisted event %s (type=%s)", event.event_id, event.type)
+                        logger.info(
+                            "Persisted event %s (type=%s)",
+                            event.event_id, event.type,
+                        )
+                        if self._projection_engine:
+                            await self._projection_engine.process(
+                                event
+                            )
                     else:
-                        logger.debug("Duplicate event %s skipped", event.event_id)
+                        logger.debug(
+                            "Duplicate event %s skipped",
+                            event.event_id,
+                        )
                 except Exception:
-                    logger.exception("Failed to persist event %s", event.event_id)
+                    logger.exception(
+                        "Failed to persist event %s", event.event_id
+                    )
                     continue
 
                 await self._consumer.commit()
