@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from punk_records.api.context import router as context_router
 from punk_records.api.events import router as events_router
 from punk_records.api.health import router as health_router
 from punk_records.api.memory import router as memory_router
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Punk Records", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
 
+    app.include_router(context_router)
     app.include_router(events_router)
     app.include_router(health_router)
     app.include_router(memory_router)

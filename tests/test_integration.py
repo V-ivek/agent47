@@ -568,3 +568,216 @@ class TestEphemeralTTL:
         )
         keys2 = [e["key"] for e in resp2.json()["entries"]]
         assert "expired-note" in keys2
+
+
+# ---------------------------------------------------------------------------
+# Epic 3 tests — Context Pack API + ClawderpunkTool end-to-end
+# ---------------------------------------------------------------------------
+
+
+class TestContextPackAPI:
+    """GET /context/{workspace_id} returns assembled context pack."""
+
+    def test_context_pack_empty_workspace(self, client):
+        ws = f"ws-ctx-empty-{uuid4().hex[:8]}"
+        resp = client.get(f"/context/{ws}", headers=AUTH_HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["workspace_id"] == ws
+        assert data["counts"]["memory"] == 0
+        assert data["counts"]["decisions"] == 0
+        assert data["counts"]["tasks"] == 0
+        assert data["counts"]["risks"] == 0
+
+    def test_context_pack_includes_decisions(self, client):
+        ws = f"ws-ctx-dec-{uuid4().hex[:8]}"
+        decision = _make_event(
+            workspace_id=ws,
+            type="decision.recorded",
+            confidence=0.9,
+            payload={"decision": "Use Redis", "rationale": "Low latency"},
+        )
+        client.post("/events", json=decision, headers=AUTH_HEADERS)
+        time.sleep(3)
+
+        resp = client.get(f"/context/{ws}", headers=AUTH_HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["counts"]["decisions"] >= 1
+        types = [e["type"] for e in data["decisions"]]
+        assert "decision.recorded" in types
+
+    def test_context_pack_includes_tasks(self, client):
+        ws = f"ws-ctx-task-{uuid4().hex[:8]}"
+        task = _make_event(
+            workspace_id=ws,
+            type="task.created",
+            payload={"title": "Fix auth", "description": "Token expiry bug"},
+        )
+        client.post("/events", json=task, headers=AUTH_HEADERS)
+        time.sleep(3)
+
+        resp = client.get(f"/context/{ws}", headers=AUTH_HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["counts"]["tasks"] >= 1
+        types = [e["type"] for e in data["tasks"]]
+        assert "task.created" in types
+
+    def test_context_pack_includes_promoted_memory(self, client):
+        ws = f"ws-ctx-mem-{uuid4().hex[:8]}"
+        candidate_id = str(uuid4())
+        shared_trace = str(uuid4())
+
+        # Create high-confidence candidate with decision in trace -> auto-promote
+        decision = _make_event(
+            workspace_id=ws,
+            type="decision.recorded",
+            trace_id=shared_trace,
+            confidence=0.9,
+            payload={"decision": "use caching"},
+        )
+        client.post("/events", json=decision, headers=AUTH_HEADERS)
+        time.sleep(3)
+
+        candidate = _make_event(
+            event_id=candidate_id,
+            workspace_id=ws,
+            type="memory.candidate",
+            trace_id=shared_trace,
+            confidence=0.85,
+            payload={"key": "ctx-memory-entry", "value": {"info": "cached"}},
+        )
+        client.post("/events", json=candidate, headers=AUTH_HEADERS)
+        time.sleep(5)
+
+        resp = client.get(f"/context/{ws}", headers=AUTH_HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["counts"]["memory"] >= 1
+        keys = [e["key"] for e in data["memory"]]
+        assert "ctx-memory-entry" in keys
+
+    def test_context_pack_requires_auth(self, client):
+        resp = client.get("/context/ws-x")
+        assert resp.status_code in (400, 401, 422)
+
+    def test_context_pack_respects_limit(self, client):
+        ws = f"ws-ctx-lim-{uuid4().hex[:8]}"
+        for i in range(3):
+            task = _make_event(
+                workspace_id=ws,
+                type="task.created",
+                payload={"title": f"Task {i}", "description": "..."},
+            )
+            client.post("/events", json=task, headers=AUTH_HEADERS)
+        time.sleep(3)
+
+        resp = client.get(
+            f"/context/{ws}", params={"limit": 2}, headers=AUTH_HEADERS
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["tasks"]) <= 2
+
+
+class TestClawderpunkToolE2E:
+    """End-to-end tests using ClawderpunkTool against the live stack."""
+
+    def test_emit_event_via_tool(self, client):
+        import asyncio
+
+        from clawderpunk_tool import ClawderpunkTool
+        from clawderpunk_tool.config import ToolConfig
+
+        ws = f"ws-tool-emit-{uuid4().hex[:8]}"
+        cfg = ToolConfig(
+            url=BASE_URL,
+            token=TOKEN,
+            workspace_id=ws,
+        )
+
+        async def _run():
+            async with ClawderpunkTool(config=cfg) as tool:
+                return await tool.emit_event(
+                    "task.created",
+                    {"title": "Tool test", "description": "E2E"},
+                )
+
+        result = asyncio.run(_run())
+        assert result["ok"] is True
+        assert result["status"] == 202
+
+        # Verify event persisted
+        time.sleep(3)
+        resp = client.get(
+            "/events", params={"workspace_id": ws}, headers=AUTH_HEADERS
+        )
+        data = resp.json()
+        assert data["total"] >= 1
+
+    def test_record_decision_via_tool(self, client):
+        import asyncio
+
+        from clawderpunk_tool import ClawderpunkTool
+        from clawderpunk_tool.config import ToolConfig
+
+        ws = f"ws-tool-dec-{uuid4().hex[:8]}"
+        cfg = ToolConfig(url=BASE_URL, token=TOKEN, workspace_id=ws)
+
+        async def _run():
+            async with ClawderpunkTool(config=cfg) as tool:
+                return await tool.record_decision(
+                    "Use Postgres", "ACID guarantees", confidence=0.9
+                )
+
+        result = asyncio.run(_run())
+        assert result["ok"] is True
+
+        time.sleep(3)
+        resp = client.get(f"/context/{ws}", headers=AUTH_HEADERS)
+        data = resp.json()
+        assert data["counts"]["decisions"] >= 1
+
+    def test_create_task_appears_in_context(self, client):
+        import asyncio
+
+        from clawderpunk_tool import ClawderpunkTool
+        from clawderpunk_tool.config import ToolConfig
+
+        ws = f"ws-tool-task-{uuid4().hex[:8]}"
+        cfg = ToolConfig(url=BASE_URL, token=TOKEN, workspace_id=ws)
+
+        async def _run():
+            async with ClawderpunkTool(config=cfg) as tool:
+                return await tool.create_task(
+                    "Implement caching", "Add Redis layer", priority="high"
+                )
+
+        result = asyncio.run(_run())
+        assert result["ok"] is True
+
+        time.sleep(3)
+        resp = client.get(f"/context/{ws}", headers=AUTH_HEADERS)
+        data = resp.json()
+        assert data["counts"]["tasks"] >= 1
+
+    def test_get_context_via_tool(self, client):
+        import asyncio
+
+        from clawderpunk_tool import ClawderpunkTool
+        from clawderpunk_tool.config import ToolConfig
+
+        ws = f"ws-tool-ctx-{uuid4().hex[:8]}"
+        cfg = ToolConfig(url=BASE_URL, token=TOKEN, workspace_id=ws)
+
+        # First emit a decision so there's data
+        async def _seed():
+            async with ClawderpunkTool(config=cfg) as tool:
+                await tool.record_decision("Test decision", "For context test")
+                return await tool.get_context(limit=5)
+
+        result = asyncio.run(_seed())
+        # get_context returns before consumer persists, so just check ok
+        assert result["ok"] is True
+        assert result["status"] == 200
