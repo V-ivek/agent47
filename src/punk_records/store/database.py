@@ -5,7 +5,21 @@ import asyncpg
 
 logger = logging.getLogger(__name__)
 
-MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "migrations"
+def _find_migrations_dir() -> Path:
+    """Find migrations dir — works both in dev (source tree) and Docker (/app)."""
+    # Try relative to source tree first (dev mode)
+    source_relative = Path(__file__).resolve().parent.parent.parent.parent / "migrations"
+    if source_relative.is_dir():
+        return source_relative
+    # Fallback: /app/migrations (Docker)
+    docker_path = Path("/app/migrations")
+    if docker_path.is_dir():
+        return docker_path
+    # Last resort: current working directory
+    return Path.cwd() / "migrations"
+
+
+MIGRATIONS_DIR = _find_migrations_dir()
 
 
 class Database:

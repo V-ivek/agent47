@@ -33,7 +33,7 @@ class TestEventProducer:
             mock_instance.start = AsyncMock()
             mock_instance.stop = AsyncMock()
             mock_instance.send_and_wait = AsyncMock()
-            mock_instance.partitions_for = MagicMock(return_value={0, 1})
+            mock_instance.partitions_for = AsyncMock(return_value={0, 1})
             MockProducer.return_value = mock_instance
 
             from punk_records.kafka.producer import EventProducer
@@ -63,11 +63,11 @@ class TestEventProducer:
         assert result is True
 
     async def test_check_health_returns_false_when_no_partitions(self, producer):
-        producer._producer.partitions_for = MagicMock(return_value=set())
+        producer._producer.partitions_for = AsyncMock(return_value=set())
         result = await producer.check_health()
         assert result is False
 
     async def test_check_health_returns_false_on_exception(self, producer):
-        producer._producer.partitions_for = MagicMock(side_effect=Exception("boom"))
+        producer._producer.partitions_for = AsyncMock(side_effect=Exception("boom"))
         result = await producer.check_health()
         assert result is False

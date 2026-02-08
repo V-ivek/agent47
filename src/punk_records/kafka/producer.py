@@ -33,7 +33,7 @@ class EventProducer:
 
     async def check_health(self) -> bool:
         try:
-            partitions = self._producer.partitions_for(self._topic)
+            partitions = await self._producer.partitions_for(self._topic)
             return partitions is not None and len(partitions) > 0
         except Exception:
             logger.exception("Kafka producer health check failed")

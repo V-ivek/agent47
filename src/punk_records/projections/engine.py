@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import timedelta
 from uuid import uuid4
@@ -133,12 +134,15 @@ class ProjectionEngine:
             status=MemoryStatus.CANDIDATE,
         )
         for row in candidates:
+            raw_value = row.get("value", {})
+            if isinstance(raw_value, str):
+                raw_value = json.loads(raw_value)
             entry = MemoryEntry(
                 entry_id=row["entry_id"],
                 workspace_id=row["workspace_id"],
                 bucket=row["bucket"],
                 key=row["key"],
-                value=row.get("value", {}),
+                value=raw_value,
                 status=row["status"],
                 confidence=row["confidence"],
                 source_event_id=row["source_event_id"],
@@ -188,6 +192,9 @@ class ProjectionEngine:
         )
         entries_created = 0
         for row in events:
+            raw_payload = row.get("payload_json", {})
+            if isinstance(raw_payload, str):
+                raw_payload = json.loads(raw_payload)
             event = EventEnvelope(
                 event_id=row["event_id"],
                 schema_version=1,
@@ -198,7 +205,7 @@ class ProjectionEngine:
                 type=row["type"],
                 severity=row["severity"],
                 confidence=row["confidence"],
-                payload=row.get("payload_json", {}),
+                payload=raw_payload,
             )
             if event.type in MEMORY_EVENT_TYPES:
                 if event.type == EventType.MEMORY_CANDIDATE:
