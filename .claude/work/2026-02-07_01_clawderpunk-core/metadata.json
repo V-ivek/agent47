@@ -1,0 +1,16 @@
+{
+  "id": "2026-02-07_01_clawderpunk-core",
+  "status": "explored",
+  "created_at": "2026-02-07T21:45:00Z",
+  "requirement_type": "epic",
+  "sources": [
+    "docs/epics/ROADMAP.md",
+    "docs/epics/EPIC-1-Core-Backbone.md",
+    "docs/clawderpunk-tech-spec.md"
+  ],
+  "title": "Epic 1 – Event Backbone & Punk Records Core",
+  "decisions": {
+    "language": "Python FastAPI",
+    "auth": "Basic bearer token (env var)"
+  }
+}

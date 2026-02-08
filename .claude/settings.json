@@ -1,0 +1,55 @@
+{
+  "extraKnownMarketplaces": {
+    "local": {
+      "source": {
+        "source": "directory",
+        "path": "/home/claude-code-toolkit/plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "system@local": true,
+    "workflow@local": true,
+    "memory@local": true,
+    "development@local": true,
+    "transition@local": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(git:*)",
+      "Bash(python:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Read(*.py)",
+      "Read(*.md)",
+      "Read(*.json)",
+      "Read(*.yaml)",
+      "Read(*.yml)",
+      "Read(*.toml)",
+      "Write(src/**/*.py)",
+      "Write(tests/**/*.py)",
+      "Edit(src/**/*.py)",
+      "Edit(tests/**/*.py)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/dev/agent47/.claude/hooks/init-transition.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
