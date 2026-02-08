@@ -1,6 +1,6 @@
 """Unit tests for API endpoints using mocked dependencies."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -143,3 +143,106 @@ class TestHealthEndpoint:
         # Health should work without any auth header
         resp = await client.get("/health")
         assert resp.status_code == 200
+
+
+class TestGetEvents:
+    @pytest.fixture
+    def mock_event_store(self):
+        store = MagicMock()
+        store.query_events = AsyncMock(return_value=[])
+        store.count_events = AsyncMock(return_value=0)
+        return store
+
+    async def test_get_events_requires_auth(self, client):
+        resp = await client.get("/events", params={"workspace_id": "ws-1"})
+        assert resp.status_code in (400, 422)
+
+    async def test_get_events_wrong_token_returns_401(self, client):
+        resp = await client.get(
+            "/events",
+            params={"workspace_id": "ws-1"},
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+        assert resp.status_code == 401
+
+    async def test_get_events_requires_workspace_id(self, client):
+        resp = await client.get(
+            "/events",
+            headers={"Authorization": "Bearer test-token-123"},
+        )
+        assert resp.status_code == 400
+
+    async def test_get_events_basic(self, client, mock_event_store):
+        sample_events = [
+            {"event_id": str(uuid4()), "workspace_id": "ws-1", "type": "task.created"},
+        ]
+        mock_event_store.query_events = AsyncMock(return_value=sample_events)
+        mock_event_store.count_events = AsyncMock(return_value=1)
+
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={"workspace_id": "ws-1"},
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["events"] == sample_events
+        assert data["total"] == 1
+        assert data["limit"] == 50
+        assert data["offset"] == 0
+
+    async def test_get_events_with_filters(self, client, mock_event_store):
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={
+                    "workspace_id": "ws-1",
+                    "type": "task.created",
+                    "after": "2026-01-01T00:00:00Z",
+                    "before": "2026-12-31T23:59:59Z",
+                },
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 200
+        mock_event_store.query_events.assert_called_once()
+        call_args = mock_event_store.query_events.call_args
+        assert call_args[0][0] == "ws-1"
+        assert call_args[0][1] == "task.created"
+        # after and before are datetime objects
+        assert call_args[0][2] is not None
+        assert call_args[0][3] is not None
+
+    async def test_get_events_pagination(self, client, mock_event_store):
+        mock_event_store.count_events = AsyncMock(return_value=100)
+
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={
+                    "workspace_id": "ws-1",
+                    "limit": 10,
+                    "offset": 20,
+                },
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 100
+        assert data["limit"] == 10
+        assert data["offset"] == 20
+        call_args = mock_event_store.query_events.call_args
+        assert call_args[0][4] == 10  # limit
+        assert call_args[0][5] == 20  # offset
