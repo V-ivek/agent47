@@ -52,6 +52,7 @@ class EventStore:
         before: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
+        severity: str | None = None,
     ) -> list[dict]:
         """Query events with optional filters, ordered by ts ASC."""
         limit = min(limit, 200)
@@ -62,6 +63,10 @@ class EventStore:
         if type is not None:
             sql += f" AND type = ${idx}"
             params.append(type)
+            idx += 1
+        if severity is not None:
+            sql += f" AND severity = ${idx}"
+            params.append(severity)
             idx += 1
         if after is not None:
             sql += f" AND ts > ${idx}"
