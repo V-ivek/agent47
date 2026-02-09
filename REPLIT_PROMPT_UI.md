@@ -8,12 +8,17 @@ Use this prompt in Replit AI (or any coding agent) to generate an MVP UI that wo
 
 You are building **Clawderpunk Console** — a web UI for the **Punk Records** service (FastAPI backend).
 
+Clawderpunk’s model:
+- **agent47 is the “Stella”** (central coordinating mind).
+- Multiple **satellite agents** do work and emit events.
+- Punk Records stores the cumulative knowledge and serves it back as Context Packs.
+
 ### 1) Goal
-Create a clean, fast UI that helps a developer/operator **see the system**:
+Create a clean, fast UI that helps the Stella (agent47) and operators **see the system**:
 - health status (Kafka + Postgres)
-- event log browsing + filters
-- memory projection browsing
-- context pack preview
+- event log browsing + filters (satellite outputs)
+- memory projection browsing (what became durable knowledge)
+- context pack preview (what the Stella injects into prompts)
 - replay a workspace (rebuild projections)
 
 The UI must be designed to **scale conceptually** as Clawderpunk grows through Epic 5:

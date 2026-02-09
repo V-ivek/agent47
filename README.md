@@ -2,9 +2,11 @@
 
 **A governed, replayable memory backbone for AI agents.**
 
-Clawderpunk is a distributed cognitive system inspired by *Vegapunk’s satellites* — multiple agent runtimes (OpenClaw, Agent Zero, others) sharing a **single immutable event log** and a **governed memory layer**.
+Clawderpunk is a distributed cognitive system inspired by *Vegapunk’s satellites* — multiple agent runtimes (OpenClaw, Agent Zero, others) feeding a **single immutable event log** and a **governed memory layer**.
 
-At the center sits **Punk Records**: the service that ingests events, persists them, builds deterministic projections, and serves **Context Packs** back to agents.
+**agent47 is the “Stella”**: the coordinating mind that delegates work to satellites, gathers their outputs, and stays coherent via context packs.
+
+At the center sits **Punk Records**: the service that ingests satellite events, persists them, builds deterministic projections, and serves **Context Packs** back to the Stella + satellites.
 
 ---
 
@@ -13,7 +15,7 @@ At the center sits **Punk Records**: the service that ingests events, persists t
 - **One source of truth:** an append-only event log (`clawderpunk.events.v1`)
 - **Replayable state:** rebuild projections deterministically from events
 - **Governed memory:** promote/retract memory with auditable rules
-- **Multi-machine safe:** agents never share a filesystem — they communicate via events
+- **Multi-machine safe:** satellites never share a filesystem — they communicate via events
 - **Adapters, not lock-in:** integrate OpenClaw + Agent Zero via thin adapters
 
 ---
@@ -53,9 +55,9 @@ flowchart LR
 ```
 
 **Mental model:**
-1) Agents emit events → Punk Records
+1) Satellites do work → emit events
 2) Punk Records persists events → builds projections
-3) Agents request a *Context Pack* → compact, high-signal memory/decisions/tasks/risks
+3) agent47 (Stella) + satellites request a *Context Pack* → compact, high-signal memory/decisions/tasks/risks
 
 ---
 
