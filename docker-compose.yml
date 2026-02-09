@@ -46,7 +46,7 @@ services:
       KAFKA_TOPIC: clawderpunk.events.v1
       KAFKA_CONSUMER_GROUP: punk-records
       DATABASE_URL: postgresql://clawderpunk:clawderpunk@postgres:5432/clawderpunk
-      PUNK_RECORDS_API_TOKEN: test-token-123
+      PUNK_RECORDS_API_TOKEN: punk-records
       LOG_LEVEL: INFO
     depends_on:
       redpanda:
@@ -59,6 +59,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+    networks:
+      - default
+      - punk-records-network
 
 volumes:
   pgdata:
+
+networks:
+  punk-records-network:
+    external: true
+    name: punk-records-network

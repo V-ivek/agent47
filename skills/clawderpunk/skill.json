@@ -1,0 +1,14 @@
+{
+  "name": "clawderpunk",
+  "version": "0.1.0",
+  "description": "OpenClaw integration for Punk Records: emit events, fetch context packs, sync governed memory",
+  "env": {
+    "CLAWDERPUNK_URL": {"required": true, "description": "Punk Records base URL"},
+    "CLAWDERPUNK_TOKEN": {"required": true, "description": "Bearer token"},
+    "CLAWDERPUNK_WORKSPACE_ID": {"required": true, "description": "Workspace identifier"},
+    "CLAWDERPUNK_SATELLITE_ID": {"required": false, "description": "Satellite id (default: openclaw)"}
+  },
+  "bins": {
+    "clawderpunk": "bins/clawderpunk"
+  }
+}

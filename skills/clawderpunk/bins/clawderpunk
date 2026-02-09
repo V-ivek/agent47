@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Wrapper for OpenClaw AgentSkill. Delegates to the Python CLI.
+exec uv run python -m openclaw_skill.cli "$@"
