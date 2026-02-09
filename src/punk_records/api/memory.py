@@ -45,8 +45,11 @@ def _to_console_memory(row: dict[str, Any]) -> dict[str, Any]:
     else:
         status_mapped = "active" if status == "promoted" else status
 
+    entry_id = str(row.get("entry_id")) if row.get("entry_id") else None
+
     return {
-        "id": str(row.get("entry_id")),
+        # console:
+        "id": entry_id,
         "workspace_id": row.get("workspace_id"),
         "bucket": row.get("bucket"),
         "content": content or "",
@@ -57,6 +60,13 @@ def _to_console_memory(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": iso(row.get("created_at")),
         "updated_at": iso(row.get("updated_at")),
         "source_event_id": str(row.get("source_event_id")) if row.get("source_event_id") else None,
+        # legacy-ish:
+        "entry_id": entry_id,
+        "key": row.get("key"),
+        "value": row.get("value"),
+        "expires_at": iso(row.get("expires_at")),
+        "promoted_at": iso(row.get("promoted_at")),
+        "retracted_at": iso(row.get("retracted_at")),
     }
 
 

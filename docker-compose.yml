@@ -59,6 +59,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+    networks:
+      - default
+      - workflow-vps-network
 
 volumes:
   pgdata:
+
+networks:
+  workflow-vps-network:
+    external: true
+    name: workflow-vps-network

@@ -30,8 +30,12 @@ async def health(request: Request):
     else:
         status = "down"
 
+    # Return a superset: console fields + legacy fields (harmless for UI).
     return {
         "status": status,
         "details": {"postgres": bool(pg_ok), "kafka": bool(kafka_ok)},
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        # legacy:
+        "postgres": "ok" if pg_ok else "error",
+        "kafka": "ok" if kafka_ok else "error",
     }

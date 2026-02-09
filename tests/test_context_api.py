@@ -126,15 +126,13 @@ class TestGetContext:
         assert resp.status_code == 200
         data = resp.json()
         assert data["workspace_id"] == "ws-test"
-        assert data["memory"] == memory_entries
-        assert data["decisions"] == decision_events
-        assert data["tasks"] == task_events
-        assert data["risks"] == risk_events
-        assert "generated_at" in data
-        assert data["counts"]["memory"] == 1
-        assert data["counts"]["decisions"] == 1
-        assert data["counts"]["tasks"] == 1
-        assert data["counts"]["risks"] == 1
+        assert "timestamp" in data
+        assert len(data["sections"]["memory"]) == 1
+        assert data["sections"]["memory"][0]["title"] == "fact.one"
+        assert data["sections"]["memory"][0]["workspace_id"] == "ws-test"
+        assert data["sections"]["decisions"] == decision_events
+        assert data["sections"]["tasks"] == task_events
+        assert data["sections"]["risks"] == risk_events
 
     async def test_empty_workspace_returns_empty_sections(
         self, app, client, mock_event_store
@@ -154,16 +152,10 @@ class TestGetContext:
         assert resp.status_code == 200
         data = resp.json()
         assert data["workspace_id"] == "ws-empty"
-        assert data["memory"] == []
-        assert data["decisions"] == []
-        assert data["tasks"] == []
-        assert data["risks"] == []
-        assert data["counts"] == {
-            "memory": 0,
-            "decisions": 0,
-            "tasks": 0,
-            "risks": 0,
-        }
+        assert data["sections"]["memory"] == []
+        assert data["sections"]["decisions"] == []
+        assert data["sections"]["tasks"] == []
+        assert data["sections"]["risks"] == []
 
     async def test_limit_param_passed_to_queries(
         self, app, client, mock_event_store
@@ -337,10 +329,10 @@ class TestGetContext:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["counts"]["memory"] == 3
-        assert data["counts"]["decisions"] == 2
-        assert data["counts"]["tasks"] == 1
-        assert data["counts"]["risks"] == 0
+        assert len(data["sections"]["memory"]) == 3
+        assert len(data["sections"]["decisions"]) == 2
+        assert len(data["sections"]["tasks"]) == 1
+        assert len(data["sections"]["risks"]) == 0
 
     async def test_tasks_section_queries_correct_type(
         self, app, client, mock_event_store

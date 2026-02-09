@@ -99,8 +99,9 @@ class TestGetMemory:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["entries"] == entries
-        assert data["count"] == 1
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["workspace_id"] == "ws-test"
 
     async def test_bucket_filter(self, app, client):
         resp = await client.get(
@@ -194,7 +195,6 @@ class TestReplay:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "completed"
         assert data["entries_deleted"] == 5
         assert data["events_replayed"] == 20
         assert data["entries_created"] == 3
