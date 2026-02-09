@@ -1,8 +1,8 @@
-# Clawderpunk — Punk Records
+# Punk Records
 
 **A governed, replayable memory backbone for AI agents.**
 
-Clawderpunk is a distributed cognitive system inspired by *Vegapunk’s satellites* — multiple agent runtimes (OpenClaw, Agent Zero, others) feeding a **single immutable event log** and a **governed memory layer**.
+Punk records is a distributed cognitive system inspired by *Vegapunk’s satellites* — multiple agent runtimes (OpenClaw, Agent Zero, others) feeding a **single immutable event log** and a **governed memory layer**.
 
 **agent47 is the “Stella”**: the coordinating mind that delegates work to satellites, gathers their outputs, and stays coherent via context packs.
 
@@ -12,7 +12,7 @@ At the center sits **Punk Records**: the service that ingests satellite events, 
 
 ## The pitch (in one screen)
 
-- **One source of truth:** an append-only event log (`clawderpunk.events.v1`)
+- **One source of truth:** an append-only event log (`punk-records.events.v1`)
 - **Replayable state:** rebuild projections deterministically from events
 - **Governed memory:** promote/retract memory with auditable rules
 - **Multi-machine safe:** satellites never share a filesystem — they communicate via events
@@ -32,7 +32,7 @@ flowchart LR
 
   subgraph Backbone[Event Backbone]
     K[(Kafka API / Redpanda)]
-    T[Topic: clawderpunk.events.v1]
+    T[Topic: punk-records.events.v1]
     K --> T
   end
 
@@ -103,7 +103,7 @@ Health check:
 
 ---
 
-## Clawderpunk Console (UI)
+## Punk Records Console (UI)
 
 A web console is planned to make the system *visible* (events, memory, replay, context packs).
 
@@ -133,7 +133,7 @@ The UI is intentionally designed to scale through Epic 5 (satellites, adapters, 
 
 ## Vision
 
-Clawderpunk is built for a world where:
+Punk Records is built for a world where:
 - multiple agents run on different machines,
 - you want their “memory” to be **auditable**, **replayable**, and **governed**,
 - and you refuse to debug a black box.
