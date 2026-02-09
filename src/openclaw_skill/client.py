@@ -23,15 +23,21 @@ class PunkRecordsClient:
             raise ValueError("token is required")
 
     def __enter__(self) -> "PunkRecordsClient":
-        self._client = httpx.Client(
-            base_url=self.base_url,
-            headers={"Authorization": f"Bearer {self.token}"},
-            timeout=httpx.Timeout(self.timeout_seconds),
+        object.__setattr__(
+            self,
+            "_client",
+            httpx.Client(
+                base_url=self.base_url,
+                headers={"Authorization": f"Bearer {self.token}"},
+                timeout=httpx.Timeout(self.timeout_seconds),
+            ),
         )
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        self._client.close()
+        client = getattr(self, "_client", None)
+        if client is not None:
+            client.close()
 
     def _handle(self, resp: httpx.Response) -> Any:
         try:
