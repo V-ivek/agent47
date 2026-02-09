@@ -22,3 +22,10 @@ htmlcov/
 
 # MCP config (local tooling)
 .mcp.json
+
+# AI tooling artifacts
+.claude/
+.serena/
+
+# UV lockfile (optional; commit if you want reproducible deps)
+# uv.lock
