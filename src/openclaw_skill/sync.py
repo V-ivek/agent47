@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import fcntl
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-import fcntl
 
 from openclaw_skill.client import PunkRecordsClient, PunkRecordsError
 from openclaw_skill.config import SkillConfig

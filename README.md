@@ -101,6 +101,22 @@ Ports (from `docker-compose.yml`):
 Health check:
 - `GET http://localhost:4701/health`
 
+## Development quality checks
+
+```bash
+# Install dev deps
+uv sync --extra dev
+
+# Lint
+uv run ruff check
+
+# Fast test suite (excludes docker-backed integration tests)
+uv run pytest -q -m "not integration"
+
+# Full integration suite (requires docker compose stack running)
+uv run pytest tests/test_integration.py -v -m integration
+```
+
 ---
 
 ## Punk Records Console (UI)

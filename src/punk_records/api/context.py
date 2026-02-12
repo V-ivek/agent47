@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -10,8 +11,6 @@ from punk_records.store.event_store import EventStore
 
 def _to_console_memory(entry: dict) -> dict:
     # Mirror the /memory endpoint contract for console use.
-    from datetime import datetime, timezone
-    import json
 
     def iso(v):
         if v is None:
@@ -48,7 +47,9 @@ def _to_console_memory(entry: dict) -> dict:
         "status": status_mapped,
         "created_at": iso(entry.get("created_at")),
         "updated_at": iso(entry.get("updated_at")),
-        "source_event_id": str(entry.get("source_event_id")) if entry.get("source_event_id") else None,
+        "source_event_id": (
+            str(entry.get("source_event_id")) if entry.get("source_event_id") else None
+        ),
     }
 
 

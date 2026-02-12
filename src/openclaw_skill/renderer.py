@@ -84,7 +84,11 @@ def render_memory_generated(
 
             mem_lines.append(f"- **{key}**: {summary}")
             mem_lines.append(
-                f"  - id: `{entry_id}` | source: `{source_event_id}` | promoted: `{promoted_at}` | conf: {conf_str}"
+                "  - "
+                f"id: `{entry_id}` | "
+                f"source: `{source_event_id}` | "
+                f"promoted: `{promoted_at}` | "
+                f"conf: {conf_str}"
             )
 
     sections: list[str] = []
