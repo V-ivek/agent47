@@ -3,17 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from punk_records.api.deps import verify_token
 from punk_records.models.memory import MemoryBucket, MemoryStatus
 
 router = APIRouter()
-
-
-async def verify_token(request: Request, authorization: str = Header(...)):
-    expected = f"Bearer {request.app.state.settings.punk_records_api_token}"
-    if authorization != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
 
 
 def _to_console_memory(row: dict[str, Any]) -> dict[str, Any]:

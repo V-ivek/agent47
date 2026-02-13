@@ -73,7 +73,7 @@ class TestPostEvents:
 
     async def test_missing_token_returns_error(self, client):
         resp = await client.post("/events", json=_valid_event_body())
-        assert resp.status_code in (400, 422)  # 400 due to our 422→400 handler
+        assert resp.status_code == 401
 
     async def test_wrong_token_returns_401(self, client):
         resp = await client.post(
@@ -85,13 +85,43 @@ class TestPostEvents:
 
     async def test_invalid_event_returns_400(self, client):
         body = _valid_event_body()
-        body["severity"] = "critical"  # invalid
+        body["severity"] = "critical"  # invalid for internal envelope
         resp = await client.post(
             "/events",
             json=body,
             headers={"Authorization": "Bearer test-token-123"},
         )
         assert resp.status_code == 400
+
+    async def test_console_event_invalid_timestamp_returns_400(self, client):
+        body = {
+            "type": "task.created",
+            "workspace_id": "ws-test",
+            "payload": {"title": "bad timestamp"},
+            "timestamp": "not-a-date",
+        }
+        resp = await client.post(
+            "/events",
+            json=body,
+            headers={"Authorization": "Bearer test-token-123"},
+        )
+        assert resp.status_code == 400
+        assert "Invalid timestamp" in resp.text
+
+    async def test_console_event_invalid_severity_returns_400(self, client):
+        body = {
+            "type": "task.created",
+            "workspace_id": "ws-test",
+            "payload": {"title": "bad severity"},
+            "severity": "panic",
+        }
+        resp = await client.post(
+            "/events",
+            json=body,
+            headers={"Authorization": "Bearer test-token-123"},
+        )
+        assert resp.status_code == 400
+        assert "Invalid severity" in resp.text
 
     async def test_missing_required_field_returns_400(self, client):
         body = _valid_event_body()
@@ -153,7 +183,7 @@ class TestGetEvents:
 
     async def test_get_events_requires_auth(self, client):
         resp = await client.get("/events", params={"workspace_id": "ws-1"})
-        assert resp.status_code in (400, 422)
+        assert resp.status_code == 401
 
     async def test_get_events_wrong_token_returns_401(self, client):
         resp = await client.get(

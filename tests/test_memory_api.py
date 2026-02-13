@@ -72,7 +72,7 @@ async def client(app):
 class TestGetMemory:
     async def test_requires_auth(self, client):
         resp = await client.get("/memory/ws-test")
-        assert resp.status_code in (400, 422)
+        assert resp.status_code == 401
 
     async def test_wrong_token_returns_401(self, client):
         resp = await client.get(
@@ -171,7 +171,7 @@ class TestGetMemory:
 class TestReplay:
     async def test_requires_auth(self, client):
         resp = await client.post("/replay/ws-test")
-        assert resp.status_code in (400, 422)
+        assert resp.status_code == 401
 
     async def test_wrong_token_returns_401(self, client):
         resp = await client.post(

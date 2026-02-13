@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 
+from punk_records.api.deps import parse_iso8601_utc, verify_token
 from punk_records.models.memory import MemoryStatus
 from punk_records.store.event_store import EventStore
 
@@ -56,12 +57,6 @@ def _to_console_memory(entry: dict) -> dict:
 router = APIRouter()
 
 
-async def verify_token(request: Request, authorization: str = Header(...)):
-    expected = f"Bearer {request.app.state.settings.punk_records_api_token}"
-    if authorization != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
-
-
 @router.get("/context/{workspace_id}", dependencies=[Depends(verify_token)])
 async def get_context(
     request: Request,
@@ -78,9 +73,7 @@ async def get_context(
     """
 
     if since is not None:
-        since_dt = datetime.fromisoformat(since)
-        if since_dt.tzinfo is None:
-            since_dt = since_dt.replace(tzinfo=timezone.utc)
+        since_dt = parse_iso8601_utc(since, field_name="since")
     else:
         since_dt = datetime.now(timezone.utc) - timedelta(days=7)
 

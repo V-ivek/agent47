@@ -69,7 +69,7 @@ class TestGetContext:
 
     async def test_requires_auth(self, client):
         resp = await client.get("/context/ws-test")
-        assert resp.status_code in (400, 422)
+        assert resp.status_code == 401
 
     async def test_wrong_token_returns_401(self, client):
         resp = await client.get(
@@ -198,6 +198,22 @@ class TestGetContext:
         expected_dt = datetime.fromisoformat(since_str)
         for call in mock_event_store.query_events.call_args_list:
             assert call.kwargs["after"] == expected_dt
+
+    async def test_invalid_since_returns_400(self, app, client, mock_event_store):
+        mock_event_store.query_events = AsyncMock(return_value=[])
+
+        with patch(
+            "punk_records.api.context.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/context/ws-test",
+                params={"since": "definitely-not-an-iso-date"},
+                headers=AUTH,
+            )
+
+        assert resp.status_code == 400
+        assert "Invalid since" in resp.text
 
     async def test_default_since_is_7_days(
         self, app, client, mock_event_store
