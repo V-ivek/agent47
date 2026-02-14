@@ -1,5 +1,6 @@
 """Unit tests for API endpoints using mocked dependencies."""
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -248,6 +249,63 @@ class TestGetEvents:
         # after and before are datetime objects
         assert call_args[0][2] is not None
         assert call_args[0][3] is not None
+
+    async def test_get_events_invalid_after_returns_400(self, client, mock_event_store):
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={"workspace_id": "ws-1", "after": "not-a-date"},
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 400
+        assert "Invalid after" in resp.text
+
+    async def test_get_events_normalizes_naive_and_offset_datetimes(
+        self, client, mock_event_store
+    ):
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={
+                    "workspace_id": "ws-1",
+                    "after": "2026-01-01T00:00:00",
+                    "before": "2026-01-01T12:00:00+05:30",
+                },
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 200
+        call_args = mock_event_store.query_events.call_args
+        after_dt = call_args[0][2]
+        before_dt = call_args[0][3]
+
+        assert after_dt == datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        assert before_dt == datetime(2026, 1, 1, 6, 30, tzinfo=timezone.utc)
+
+    async def test_get_events_rejects_invalid_time_range(self, client, mock_event_store):
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={
+                    "workspace_id": "ws-1",
+                    "after": "2026-01-01T01:00:00Z",
+                    "before": "2026-01-01T01:00:00Z",
+                },
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 400
+        assert "must be earlier than" in resp.text
 
     async def test_get_events_pagination(self, client, mock_event_store):
         mock_event_store.count_events = AsyncMock(return_value=100)

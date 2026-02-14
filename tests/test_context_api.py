@@ -134,6 +134,37 @@ class TestGetContext:
         assert data["sections"]["tasks"] == task_events
         assert data["sections"]["risks"] == risk_events
 
+    async def test_context_memory_status_active_for_future_expiry(
+        self, app, client, mock_event_store
+    ):
+        memory_entries = [
+            {
+                "entry_id": str(uuid4()),
+                "workspace_id": "ws-test",
+                "bucket": "ephemeral",
+                "key": "fact.future",
+                "value": {"hello": "world"},
+                "status": "promoted",
+                "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+            },
+        ]
+
+        app.state.memory_store.get_entries = AsyncMock(return_value=memory_entries)
+        mock_event_store.query_events = AsyncMock(return_value=[])
+
+        with patch(
+            "punk_records.api.context.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/context/ws-test",
+                headers=AUTH,
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["sections"]["memory"][0]["status"] == "active"
+
     async def test_empty_workspace_returns_empty_sections(
         self, app, client, mock_event_store
     ):

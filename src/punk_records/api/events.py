@@ -169,15 +169,24 @@ async def get_events(
     request: Request,
     workspace_id: str = Query(..., min_length=1),
     type: str | None = Query(None),
-    after: datetime | None = Query(None),
-    before: datetime | None = Query(None),
+    after: str | None = Query(None),
+    before: str | None = Query(None),
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     """Console contract: returns a JSON array of events."""
 
+    after_dt = parse_iso8601_utc(after, field_name="after") if after is not None else None
+    before_dt = parse_iso8601_utc(before, field_name="before") if before is not None else None
+
+    if after_dt is not None and before_dt is not None and after_dt >= before_dt:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid range: 'after' must be earlier than 'before'",
+        )
+
     event_store = EventStore(request.app.state.database.pool)
     events = await event_store.query_events(
-        workspace_id, type, after, before, limit, offset
+        workspace_id, type, after_dt, before_dt, limit, offset
     )
     return [_to_console_event(e) for e in events]

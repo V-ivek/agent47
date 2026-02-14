@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query, Request
 
+from punk_records.api.console import iso_utc, map_console_memory_status
 from punk_records.api.deps import parse_iso8601_utc, verify_token
 from punk_records.models.memory import MemoryStatus
 from punk_records.store.event_store import EventStore
@@ -12,15 +13,6 @@ from punk_records.store.event_store import EventStore
 
 def _to_console_memory(entry: dict) -> dict:
     # Mirror the /memory endpoint contract for console use.
-
-    def iso(v):
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            if v.tzinfo is None:
-                v = v.replace(tzinfo=timezone.utc)
-            return v.astimezone(timezone.utc).isoformat()
-        return str(v)
 
     content = entry.get("value")
     if isinstance(content, str):
@@ -30,13 +22,6 @@ def _to_console_memory(entry: dict) -> dict:
         except Exception:
             content = content
 
-    status = (entry.get("status") or "").lower()
-    expires_at = iso(entry.get("expires_at"))
-    if expires_at is not None:
-        status_mapped = "expired" if status == "promoted" else status
-    else:
-        status_mapped = "active" if status == "promoted" else status
-
     return {
         "id": str(entry.get("entry_id")),
         "workspace_id": entry.get("workspace_id"),
@@ -45,9 +30,12 @@ def _to_console_memory(entry: dict) -> dict:
         "title": entry.get("key"),
         "summary": "",
         "confidence": entry.get("confidence"),
-        "status": status_mapped,
-        "created_at": iso(entry.get("created_at")),
-        "updated_at": iso(entry.get("updated_at")),
+        "status": map_console_memory_status(
+            entry.get("status"),
+            expires_at=entry.get("expires_at"),
+        ),
+        "created_at": iso_utc(entry.get("created_at")),
+        "updated_at": iso_utc(entry.get("updated_at")),
         "source_event_id": (
             str(entry.get("source_event_id")) if entry.get("source_event_id") else None
         ),
