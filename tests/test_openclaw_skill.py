@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -104,6 +105,29 @@ def test_renderer_deterministic_and_newline() -> None:
     assert "{\"a\":2,\"z\":1}" in out1
 
 
+def test_renderer_handles_asyncpg_style_rows() -> None:
+    dt = datetime(2026, 2, 9, 0, 0, tzinfo=timezone.utc)
+    decision_id = uuid4()
+    out = render_memory_generated(
+        workspace_id="w",
+        memory_entries=[],
+        decisions=[
+            {
+                "event_id": decision_id,
+                "ts": datetime(2026, 2, 9, 1, 0, tzinfo=timezone.utc),
+                "payload_json": '{"z":1,"a":2}',
+            }
+        ],
+        tasks=[],
+        risks=[],
+        generated_at=dt,
+    )
+
+    assert out.endswith("\n")
+    # Uses payload_json when present and normalizes key ordering.
+    assert "{\"a\":2,\"z\":1}" in out
+
+
 def test_daily_snapshot_is_json_and_deterministic() -> None:
     dt = datetime(2026, 2, 9, 0, 0, tzinfo=timezone.utc)
     pack = {"memory": [{"x": 1, "a": 2}], "decisions": []}
@@ -153,3 +177,53 @@ def test_sync_memory_lock_and_writes(tmp_path: Path, monkeypatch: pytest.MonkeyP
         res2 = sync_memory(cfg, vault_root=tmp_path)
         assert res2["ok"] is False
         assert res2["error"] == "sync_locked"
+
+
+def test_sync_memory_is_idempotent_for_unchanged_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAWDERPUNK_URL", "http://x")
+    monkeypatch.setenv("CLAWDERPUNK_TOKEN", "t")
+    monkeypatch.setenv("CLAWDERPUNK_WORKSPACE_ID", "w")
+
+    class FakeClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def get_context(self, **kwargs):
+            return {
+                "decisions": [{"payload_json": '{"kind":"decision","v":1}'}],
+                "tasks": [],
+                "risks": [],
+            }
+
+        def get_memory(self, **kwargs):
+            return {
+                "entries": [
+                    {
+                        "entry_id": "e1",
+                        "key": "alpha",
+                        "value": "one",
+                        "status": "promoted",
+                        "bucket": "workspace",
+                        "source_event_id": "src1",
+                        "promoted_at": "2026-02-09T00:00:00Z",
+                        "confidence": 0.9,
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("openclaw_skill.sync.PunkRecordsClient", lambda *a, **k: FakeClient())
+
+    cfg = SkillConfig()
+    first = sync_memory(cfg, vault_root=tmp_path)
+    assert first["ok"] is True
+    assert len(first["files_written"]) == 2
+
+    second = sync_memory(cfg, vault_root=tmp_path)
+    assert second["ok"] is True
+    assert second["files_written"] == []
+    assert len(second["files_unchanged"]) == 2

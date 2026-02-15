@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timezone
 from typing import Any
+from uuid import UUID
 
 
 def _iso(dt: datetime) -> str:
@@ -11,8 +12,24 @@ def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat()
 
 
+def _json_default(value: Any) -> str:
+    if isinstance(value, datetime):
+        return _iso(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
+    return str(value)
+
+
 def _stable_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=_json_default,
+    )
 
 
 def _strip_trailing_ws(s: str) -> str:
@@ -54,10 +71,12 @@ def render_memory_generated(
         filtered.append(e)
 
     def sort_key(e: dict[str, Any]):
+        entry_id = str(e.get("entry_id") or e.get("id") or "")
+        key = str(e.get("key") or e.get("title") or entry_id)
         return (
-            str(e.get("key") or ""),
+            key,
             str(e.get("promoted_at") or ""),
-            str(e.get("entry_id") or e.get("id") or ""),
+            entry_id,
         )
 
     filtered.sort(key=sort_key)
@@ -101,12 +120,25 @@ def render_memory_generated(
         if not events:
             lines.append("- (none)")
         else:
+            normalized_items: list[tuple[str, Any]] = []
             for ev in events:
-                # Best-effort: show payload stably.
-                payload = ev.get("payload") if isinstance(ev, dict) else None
-                if payload is None:
-                    payload = ev
-                lines.append(f"- {_stable_json(payload)}")
+                item: Any = ev
+                if isinstance(ev, dict):
+                    payload = ev.get("payload")
+                    if payload is None and "payload_json" in ev:
+                        payload_raw = ev.get("payload_json")
+                        if isinstance(payload_raw, str):
+                            try:
+                                payload = json.loads(payload_raw)
+                            except Exception:
+                                payload = payload_raw
+                    if payload is not None:
+                        item = payload
+
+                normalized_items.append((_stable_json(item), item))
+
+            for _, item in sorted(normalized_items, key=lambda t: t[0]):
+                lines.append(f"- {_stable_json(item)}")
         return lines
 
     sections.extend(render_events_section("Decisions", decisions))
