@@ -81,7 +81,8 @@ See the roadmap: `docs/epics/ROADMAP.md`.
 - `POST /events` (auth) — emit an event envelope
 - `GET /events` (auth) — query events by workspace/time/type
 - `GET /memory/{workspace_id}` (auth) — query memory entries
-- `GET /context/{workspace_id}` (auth) — fetch a Context Pack
+- `GET /context/{workspace_id}` (auth) — legacy context endpoint
+- `GET /context-packs/{workspace_id}` (auth) — Context Pack API v0 (ranked memory + decisions/tasks/risks)
 - `POST /replay/{workspace_id}` (auth) — replay a workspace to rebuild projections
 
 ---
