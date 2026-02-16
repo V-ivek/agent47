@@ -77,6 +77,7 @@ See the roadmap: `docs/epics/ROADMAP.md`.
 > `Authorization: Bearer <PUNK_RECORDS_API_TOKEN>`
 
 - `GET /health` (no auth)
+- `GET /metrics` (no auth) — Prometheus metrics for HTTP/Kafka activity
 - `POST /events` (auth) — emit an event envelope
 - `GET /events` (auth) — query events by workspace/time/type
 - `GET /memory/{workspace_id}` (auth) — query memory entries

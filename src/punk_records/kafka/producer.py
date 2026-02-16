@@ -3,6 +3,7 @@ import logging
 from aiokafka import AIOKafkaProducer
 
 from punk_records.models.events import EventEnvelope
+from punk_records.observability.metrics import observe_produced_event
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +25,17 @@ class EventProducer:
         logger.info("Kafka producer stopped")
 
     async def send_event(self, event: EventEnvelope) -> None:
-        await self._producer.send_and_wait(
-            self._topic,
-            key=event.kafka_key(),
-            value=event.to_kafka_value(),
-        )
+        try:
+            await self._producer.send_and_wait(
+                self._topic,
+                key=event.kafka_key(),
+                value=event.to_kafka_value(),
+            )
+        except Exception:
+            observe_produced_event(topic=self._topic, result="error")
+            raise
+
+        observe_produced_event(topic=self._topic, result="ok")
         logger.debug("Produced event %s to %s", event.event_id, self._topic)
 
     async def check_health(self) -> bool:

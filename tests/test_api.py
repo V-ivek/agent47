@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from punk_records.api.events import router as events_router
 from punk_records.api.health import router as health_router
+from punk_records.api.metrics import router as metrics_router
 from punk_records.config import Settings
 
 
@@ -25,6 +26,7 @@ def _create_test_app() -> FastAPI:
 
     app.include_router(events_router)
     app.include_router(health_router)
+    app.include_router(metrics_router)
 
     app.state.settings = Settings(punk_records_api_token="test-token-123")
     app.state.producer = MagicMock()
@@ -172,6 +174,18 @@ class TestHealthEndpoint:
         # Health should work without any auth header
         resp = await client.get("/health")
         assert resp.status_code == 200
+
+
+class TestMetricsEndpoint:
+    async def test_metrics_endpoint_returns_prometheus_text(self, client):
+        resp = await client.get("/metrics")
+
+        assert resp.status_code == 200
+        assert "text/plain" in resp.headers["content-type"]
+        body = resp.text
+        assert "punk_records_http_requests_total" in body
+        assert "punk_records_kafka_produced_events_total" in body
+        assert "punk_records_kafka_consumed_events_total" in body
 
 
 class TestGetEvents:
