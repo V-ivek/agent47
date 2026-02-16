@@ -5,19 +5,14 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, ValidationError
 
+from punk_records.api.deps import parse_iso8601_utc, verify_token
 from punk_records.models.events import EventEnvelope, EventType, Severity
 from punk_records.store.event_store import EventStore
 
 router = APIRouter()
-
-
-async def verify_token(request: Request, authorization: str = Header(...)):
-    expected = f"Bearer {request.app.state.settings.punk_records_api_token}"
-    if authorization != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
 
 
 class ConsoleEventEnvelope(BaseModel):
@@ -46,8 +41,8 @@ def _severity_to_console(s: str | None) -> str | None:
 def _severity_from_console(s: str | None) -> Severity:
     if not s:
         return Severity.LOW
-    s = s.lower()
-    return {
+
+    value = {
         "info": Severity.LOW,
         "warning": Severity.MEDIUM,
         "error": Severity.HIGH,
@@ -55,7 +50,11 @@ def _severity_from_console(s: str | None) -> Severity:
         "low": Severity.LOW,
         "medium": Severity.MEDIUM,
         "high": Severity.HIGH,
-    }.get(s, Severity.LOW)
+    }.get(s.lower())
+
+    if value is None:
+        raise ValueError(f"Invalid severity: {s}")
+    return value
 
 
 def _to_console_event(row: dict[str, Any]) -> dict[str, Any]:
@@ -130,13 +129,14 @@ async def post_event(body: dict[str, Any], request: Request) -> dict[str, Any]:
         trace_id = UUID(event.trace_id) if event.trace_id else uuid4()
 
         if event.timestamp:
-            ts = datetime.fromisoformat(event.timestamp)
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            else:
-                ts = ts.astimezone(timezone.utc)
+            ts = parse_iso8601_utc(event.timestamp, field_name="timestamp")
         else:
             ts = datetime.now(timezone.utc)
+
+        try:
+            severity = _severity_from_console(event.severity)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         internal = EventEnvelope(
             event_id=event_id,
@@ -146,7 +146,7 @@ async def post_event(body: dict[str, Any], request: Request) -> dict[str, Any]:
             satellite_id=str(event.metadata.get("satellite_id") or "console"),
             trace_id=trace_id,
             type=event_type,
-            severity=_severity_from_console(event.severity),
+            severity=severity,
             confidence=float(event.metadata.get("confidence") or 0.0),
             payload=event.payload,
         )
@@ -169,15 +169,24 @@ async def get_events(
     request: Request,
     workspace_id: str = Query(..., min_length=1),
     type: str | None = Query(None),
-    after: datetime | None = Query(None),
-    before: datetime | None = Query(None),
+    after: str | None = Query(None),
+    before: str | None = Query(None),
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     """Console contract: returns a JSON array of events."""
 
+    after_dt = parse_iso8601_utc(after, field_name="after") if after is not None else None
+    before_dt = parse_iso8601_utc(before, field_name="before") if before is not None else None
+
+    if after_dt is not None and before_dt is not None and after_dt >= before_dt:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid range: 'after' must be earlier than 'before'",
+        )
+
     event_store = EventStore(request.app.state.database.pool)
     events = await event_store.query_events(
-        workspace_id, type, after, before, limit, offset
+        workspace_id, type, after_dt, before_dt, limit, offset
     )
     return [_to_console_event(e) for e in events]

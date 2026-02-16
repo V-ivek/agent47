@@ -77,10 +77,12 @@ See the roadmap: `docs/epics/ROADMAP.md`.
 > `Authorization: Bearer <PUNK_RECORDS_API_TOKEN>`
 
 - `GET /health` (no auth)
+- `GET /metrics` (no auth) — Prometheus metrics for HTTP/Kafka activity
 - `POST /events` (auth) — emit an event envelope
 - `GET /events` (auth) — query events by workspace/time/type
 - `GET /memory/{workspace_id}` (auth) — query memory entries
-- `GET /context/{workspace_id}` (auth) — fetch a Context Pack
+- `GET /context/{workspace_id}` (auth) — legacy context endpoint
+- `GET /context-packs/{workspace_id}` (auth) — Context Pack API v0 (ranked memory + decisions/tasks/risks)
 - `POST /replay/{workspace_id}` (auth) — replay a workspace to rebuild projections
 
 ---
@@ -100,6 +102,22 @@ Ports (from `docker-compose.yml`):
 
 Health check:
 - `GET http://localhost:4701/health`
+
+## Development quality checks
+
+```bash
+# Install dev deps
+uv sync --extra dev
+
+# Lint
+uv run ruff check
+
+# Fast test suite (excludes docker-backed integration tests)
+uv run pytest -q -m "not integration"
+
+# Full integration suite (requires docker compose stack running)
+uv run pytest tests/test_integration.py -v -m integration
+```
 
 ---
 

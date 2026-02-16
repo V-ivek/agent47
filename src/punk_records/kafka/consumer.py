@@ -4,6 +4,7 @@ import logging
 from aiokafka import AIOKafkaConsumer
 
 from punk_records.models.events import EventEnvelope
+from punk_records.observability.metrics import observe_consumed_event
 from punk_records.store.event_store import EventStore
 
 logger = logging.getLogger(__name__)
@@ -58,30 +59,32 @@ class EventConsumer:
                         msg.partition,
                         msg.offset,
                     )
+                    observe_consumed_event(topic=msg.topic, result="malformed")
                     await self._consumer.commit()
                     continue
 
                 try:
                     inserted = await self._event_store.persist(event)
-                    if inserted:
-                        logger.info(
-                            "Persisted event %s (type=%s)",
-                            event.event_id, event.type,
-                        )
-                        if self._projection_engine:
-                            await self._projection_engine.process(
-                                event
-                            )
-                    else:
-                        logger.debug(
-                            "Duplicate event %s skipped",
-                            event.event_id,
-                        )
                 except Exception:
-                    logger.exception(
-                        "Failed to persist event %s", event.event_id
-                    )
+                    logger.exception("Failed to persist event %s", event.event_id)
+                    observe_consumed_event(topic=msg.topic, result="persist_error")
                     continue
+
+                if inserted:
+                    logger.info("Persisted event %s (type=%s)", event.event_id, event.type)
+                    observe_consumed_event(topic=msg.topic, result="persisted")
+                else:
+                    logger.debug("Duplicate event %s observed", event.event_id)
+                    observe_consumed_event(topic=msg.topic, result="duplicate")
+
+                if self._projection_engine:
+                    try:
+                        await self._projection_engine.process(event)
+                        observe_consumed_event(topic=msg.topic, result="projected")
+                    except Exception:
+                        logger.exception("Failed to project event %s", event.event_id)
+                        observe_consumed_event(topic=msg.topic, result="projection_error")
+                        continue
 
                 await self._consumer.commit()
         except asyncio.CancelledError:

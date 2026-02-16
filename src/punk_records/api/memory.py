@@ -1,31 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from punk_records.api.console import iso_utc, map_console_memory_status
+from punk_records.api.deps import verify_token
 from punk_records.models.memory import MemoryBucket, MemoryStatus
 
 router = APIRouter()
 
 
-async def verify_token(request: Request, authorization: str = Header(...)):
-    expected = f"Bearer {request.app.state.settings.punk_records_api_token}"
-    if authorization != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
-
-
 def _to_console_memory(row: dict[str, Any]) -> dict[str, Any]:
-    def iso(v: Any) -> str | None:
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            if v.tzinfo is None:
-                v = v.replace(tzinfo=timezone.utc)
-            return v.astimezone(timezone.utc).isoformat()
-        return str(v)
-
     content = row.get("value")
     # DB stores value as json string
     if isinstance(content, str):
@@ -36,14 +22,6 @@ def _to_console_memory(row: dict[str, Any]) -> dict[str, Any]:
             content = json.dumps(content_json, sort_keys=True, separators=(",", ":"))
         except Exception:
             content = content
-
-    status = (row.get("status") or "").lower()
-    expires_at = iso(row.get("expires_at"))
-    if expires_at is not None:
-        # Console schema wants active/expired/archived - map lightly.
-        status_mapped = "expired" if status == "promoted" else status
-    else:
-        status_mapped = "active" if status == "promoted" else status
 
     entry_id = str(row.get("entry_id")) if row.get("entry_id") else None
 
@@ -56,17 +34,20 @@ def _to_console_memory(row: dict[str, Any]) -> dict[str, Any]:
         "title": row.get("key"),
         "summary": "",
         "confidence": row.get("confidence"),
-        "status": status_mapped,
-        "created_at": iso(row.get("created_at")),
-        "updated_at": iso(row.get("updated_at")),
+        "status": map_console_memory_status(
+            row.get("status"),
+            expires_at=row.get("expires_at"),
+        ),
+        "created_at": iso_utc(row.get("created_at")),
+        "updated_at": iso_utc(row.get("updated_at")),
         "source_event_id": str(row.get("source_event_id")) if row.get("source_event_id") else None,
         # legacy-ish:
         "entry_id": entry_id,
         "key": row.get("key"),
         "value": row.get("value"),
-        "expires_at": iso(row.get("expires_at")),
-        "promoted_at": iso(row.get("promoted_at")),
-        "retracted_at": iso(row.get("retracted_at")),
+        "expires_at": iso_utc(row.get("expires_at")),
+        "promoted_at": iso_utc(row.get("promoted_at")),
+        "retracted_at": iso_utc(row.get("retracted_at")),
     }
 
 

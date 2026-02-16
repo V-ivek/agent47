@@ -1,5 +1,6 @@
 """Unit tests for memory API endpoints."""
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -72,7 +73,7 @@ async def client(app):
 class TestGetMemory:
     async def test_requires_auth(self, client):
         resp = await client.get("/memory/ws-test")
-        assert resp.status_code in (400, 422)
+        assert resp.status_code == 401
 
     async def test_wrong_token_returns_401(self, client):
         resp = await client.get(
@@ -102,6 +103,73 @@ class TestGetMemory:
         assert isinstance(data, list)
         assert len(data) == 1
         assert data[0]["workspace_id"] == "ws-test"
+
+    async def test_promoted_entry_with_future_expiry_is_active(self, app, client):
+        entries = [
+            {
+                "entry_id": str(uuid4()),
+                "workspace_id": "ws-test",
+                "bucket": "ephemeral",
+                "key": "fact.future",
+                "value": "hello",
+                "status": "promoted",
+                "expires_at": datetime.now(timezone.utc) + timedelta(hours=2),
+            },
+        ]
+        app.state.memory_store.get_entries = AsyncMock(return_value=entries)
+
+        resp = await client.get("/memory/ws-test", headers=AUTH)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["status"] == "active"
+
+    async def test_promoted_entry_with_past_expiry_is_expired(self, app, client):
+        entries = [
+            {
+                "entry_id": str(uuid4()),
+                "workspace_id": "ws-test",
+                "bucket": "ephemeral",
+                "key": "fact.past",
+                "value": "hello",
+                "status": "promoted",
+                "expires_at": datetime.now(timezone.utc) - timedelta(minutes=1),
+            },
+        ]
+        app.state.memory_store.get_entries = AsyncMock(return_value=entries)
+
+        resp = await client.get(
+            "/memory/ws-test",
+            params={"include_expired": "true"},
+            headers=AUTH,
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["status"] == "expired"
+
+    async def test_retracted_entry_is_archived(self, app, client):
+        entries = [
+            {
+                "entry_id": str(uuid4()),
+                "workspace_id": "ws-test",
+                "bucket": "workspace",
+                "key": "fact.old",
+                "value": "bye",
+                "status": "retracted",
+            },
+        ]
+        app.state.memory_store.get_entries = AsyncMock(return_value=entries)
+
+        resp = await client.get(
+            "/memory/ws-test",
+            params={"status": "retracted", "include_expired": "true"},
+            headers=AUTH,
+        )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["status"] == "archived"
 
     async def test_bucket_filter(self, app, client):
         resp = await client.get(
@@ -171,7 +239,7 @@ class TestGetMemory:
 class TestReplay:
     async def test_requires_auth(self, client):
         resp = await client.post("/replay/ws-test")
-        assert resp.status_code in (400, 422)
+        assert resp.status_code == 401
 
     async def test_wrong_token_returns_401(self, client):
         resp = await client.post(

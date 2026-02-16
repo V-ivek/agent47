@@ -1,26 +1,18 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 
+from punk_records.api.console import iso_utc, map_console_memory_status
+from punk_records.api.deps import parse_iso8601_utc, verify_token
 from punk_records.models.memory import MemoryStatus
 from punk_records.store.event_store import EventStore
 
 
 def _to_console_memory(entry: dict) -> dict:
     # Mirror the /memory endpoint contract for console use.
-    from datetime import datetime, timezone
-    import json
-
-    def iso(v):
-        if v is None:
-            return None
-        if isinstance(v, datetime):
-            if v.tzinfo is None:
-                v = v.replace(tzinfo=timezone.utc)
-            return v.astimezone(timezone.utc).isoformat()
-        return str(v)
 
     content = entry.get("value")
     if isinstance(content, str):
@@ -30,13 +22,6 @@ def _to_console_memory(entry: dict) -> dict:
         except Exception:
             content = content
 
-    status = (entry.get("status") or "").lower()
-    expires_at = iso(entry.get("expires_at"))
-    if expires_at is not None:
-        status_mapped = "expired" if status == "promoted" else status
-    else:
-        status_mapped = "active" if status == "promoted" else status
-
     return {
         "id": str(entry.get("entry_id")),
         "workspace_id": entry.get("workspace_id"),
@@ -45,20 +30,19 @@ def _to_console_memory(entry: dict) -> dict:
         "title": entry.get("key"),
         "summary": "",
         "confidence": entry.get("confidence"),
-        "status": status_mapped,
-        "created_at": iso(entry.get("created_at")),
-        "updated_at": iso(entry.get("updated_at")),
-        "source_event_id": str(entry.get("source_event_id")) if entry.get("source_event_id") else None,
+        "status": map_console_memory_status(
+            entry.get("status"),
+            expires_at=entry.get("expires_at"),
+        ),
+        "created_at": iso_utc(entry.get("created_at")),
+        "updated_at": iso_utc(entry.get("updated_at")),
+        "source_event_id": (
+            str(entry.get("source_event_id")) if entry.get("source_event_id") else None
+        ),
     }
 
 
 router = APIRouter()
-
-
-async def verify_token(request: Request, authorization: str = Header(...)):
-    expected = f"Bearer {request.app.state.settings.punk_records_api_token}"
-    if authorization != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
 
 
 @router.get("/context/{workspace_id}", dependencies=[Depends(verify_token)])
@@ -77,9 +61,7 @@ async def get_context(
     """
 
     if since is not None:
-        since_dt = datetime.fromisoformat(since)
-        if since_dt.tzinfo is None:
-            since_dt = since_dt.replace(tzinfo=timezone.utc)
+        since_dt = parse_iso8601_utc(since, field_name="since")
     else:
         since_dt = datetime.now(timezone.utc) - timedelta(days=7)
 

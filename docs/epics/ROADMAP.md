@@ -31,3 +31,4 @@
 - UI console
 - More satellites
 - Public documentation & demos
+- Epic 6: Landing page / Home page + Flashy README

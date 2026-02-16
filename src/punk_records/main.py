@@ -6,12 +6,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from punk_records.api.context import router as context_router
+from punk_records.api.context_packs import router as context_packs_router
 from punk_records.api.events import router as events_router
 from punk_records.api.health import router as health_router
 from punk_records.api.memory import router as memory_router
+from punk_records.api.metrics import router as metrics_router
 from punk_records.config import Settings
 from punk_records.kafka.consumer import EventConsumer
 from punk_records.kafka.producer import EventProducer
+from punk_records.observability.metrics import RequestTimer
 from punk_records.projections.engine import ProjectionEngine
 from punk_records.store.database import Database
 from punk_records.store.event_store import EventStore
@@ -81,9 +84,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
 
     app.include_router(context_router)
+    app.include_router(context_packs_router)
     app.include_router(events_router)
     app.include_router(health_router)
     app.include_router(memory_router)
+    app.include_router(metrics_router)
+
+    @app.middleware("http")
+    async def observe_http_requests(request: Request, call_next):
+        timer = RequestTimer()
+        try:
+            response = await call_next(request)
+        except Exception:
+            timer.observe(request, 500)
+            raise
+
+        timer.observe(request, response.status_code)
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):

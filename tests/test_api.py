@@ -1,5 +1,6 @@
 """Unit tests for API endpoints using mocked dependencies."""
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from punk_records.api.events import router as events_router
 from punk_records.api.health import router as health_router
+from punk_records.api.metrics import router as metrics_router
 from punk_records.config import Settings
 
 
@@ -24,6 +26,7 @@ def _create_test_app() -> FastAPI:
 
     app.include_router(events_router)
     app.include_router(health_router)
+    app.include_router(metrics_router)
 
     app.state.settings = Settings(punk_records_api_token="test-token-123")
     app.state.producer = MagicMock()
@@ -73,7 +76,7 @@ class TestPostEvents:
 
     async def test_missing_token_returns_error(self, client):
         resp = await client.post("/events", json=_valid_event_body())
-        assert resp.status_code in (400, 422)  # 400 due to our 422→400 handler
+        assert resp.status_code == 401
 
     async def test_wrong_token_returns_401(self, client):
         resp = await client.post(
@@ -85,13 +88,43 @@ class TestPostEvents:
 
     async def test_invalid_event_returns_400(self, client):
         body = _valid_event_body()
-        body["severity"] = "critical"  # invalid
+        body["severity"] = "critical"  # invalid for internal envelope
         resp = await client.post(
             "/events",
             json=body,
             headers={"Authorization": "Bearer test-token-123"},
         )
         assert resp.status_code == 400
+
+    async def test_console_event_invalid_timestamp_returns_400(self, client):
+        body = {
+            "type": "task.created",
+            "workspace_id": "ws-test",
+            "payload": {"title": "bad timestamp"},
+            "timestamp": "not-a-date",
+        }
+        resp = await client.post(
+            "/events",
+            json=body,
+            headers={"Authorization": "Bearer test-token-123"},
+        )
+        assert resp.status_code == 400
+        assert "Invalid timestamp" in resp.text
+
+    async def test_console_event_invalid_severity_returns_400(self, client):
+        body = {
+            "type": "task.created",
+            "workspace_id": "ws-test",
+            "payload": {"title": "bad severity"},
+            "severity": "panic",
+        }
+        resp = await client.post(
+            "/events",
+            json=body,
+            headers={"Authorization": "Bearer test-token-123"},
+        )
+        assert resp.status_code == 400
+        assert "Invalid severity" in resp.text
 
     async def test_missing_required_field_returns_400(self, client):
         body = _valid_event_body()
@@ -143,6 +176,18 @@ class TestHealthEndpoint:
         assert resp.status_code == 200
 
 
+class TestMetricsEndpoint:
+    async def test_metrics_endpoint_returns_prometheus_text(self, client):
+        resp = await client.get("/metrics")
+
+        assert resp.status_code == 200
+        assert "text/plain" in resp.headers["content-type"]
+        body = resp.text
+        assert "punk_records_http_requests_total" in body
+        assert "punk_records_kafka_produced_events_total" in body
+        assert "punk_records_kafka_consumed_events_total" in body
+
+
 class TestGetEvents:
     @pytest.fixture
     def mock_event_store(self):
@@ -153,7 +198,7 @@ class TestGetEvents:
 
     async def test_get_events_requires_auth(self, client):
         resp = await client.get("/events", params={"workspace_id": "ws-1"})
-        assert resp.status_code in (400, 422)
+        assert resp.status_code == 401
 
     async def test_get_events_wrong_token_returns_401(self, client):
         resp = await client.get(
@@ -218,6 +263,63 @@ class TestGetEvents:
         # after and before are datetime objects
         assert call_args[0][2] is not None
         assert call_args[0][3] is not None
+
+    async def test_get_events_invalid_after_returns_400(self, client, mock_event_store):
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={"workspace_id": "ws-1", "after": "not-a-date"},
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 400
+        assert "Invalid after" in resp.text
+
+    async def test_get_events_normalizes_naive_and_offset_datetimes(
+        self, client, mock_event_store
+    ):
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={
+                    "workspace_id": "ws-1",
+                    "after": "2026-01-01T00:00:00",
+                    "before": "2026-01-01T12:00:00+05:30",
+                },
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 200
+        call_args = mock_event_store.query_events.call_args
+        after_dt = call_args[0][2]
+        before_dt = call_args[0][3]
+
+        assert after_dt == datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        assert before_dt == datetime(2026, 1, 1, 6, 30, tzinfo=timezone.utc)
+
+    async def test_get_events_rejects_invalid_time_range(self, client, mock_event_store):
+        with patch(
+            "punk_records.api.events.EventStore",
+            return_value=mock_event_store,
+        ):
+            resp = await client.get(
+                "/events",
+                params={
+                    "workspace_id": "ws-1",
+                    "after": "2026-01-01T01:00:00Z",
+                    "before": "2026-01-01T01:00:00Z",
+                },
+                headers={"Authorization": "Bearer test-token-123"},
+            )
+
+        assert resp.status_code == 400
+        assert "must be earlier than" in resp.text
 
     async def test_get_events_pagination(self, client, mock_event_store):
         mock_event_store.count_events = AsyncMock(return_value=100)

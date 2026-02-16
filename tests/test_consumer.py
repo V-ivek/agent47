@@ -57,7 +57,7 @@ class TestEventConsumer:
         store.persist = AsyncMock(return_value=True)
         return store
 
-    def _make_consumer(self, mock_store, messages):
+    def _make_consumer(self, mock_store, messages, projection_engine=None):
         mock_kafka = _mock_kafka_consumer(messages)
         with patch("punk_records.kafka.consumer.AIOKafkaConsumer", return_value=mock_kafka):
             from punk_records.kafka.consumer import EventConsumer
@@ -67,6 +67,7 @@ class TestEventConsumer:
                 topic="test",
                 group_id="test-group",
                 event_store=mock_store,
+                projection_engine=projection_engine,
             )
         return consumer, mock_kafka
 
@@ -106,4 +107,44 @@ class TestEventConsumer:
         await consumer.stop()
 
         mock_store.persist.assert_called_once()
+        mock_kafka.commit.assert_not_called()
+
+    async def test_duplicate_event_is_still_projected_and_committed(self, mock_store):
+        event = _make_event()
+        msg = _make_kafka_msg(event.to_kafka_value())
+        mock_store.persist = AsyncMock(return_value=False)
+        projection_engine = MagicMock()
+        projection_engine.process = AsyncMock()
+
+        consumer, mock_kafka = self._make_consumer(
+            mock_store,
+            [msg],
+            projection_engine=projection_engine,
+        )
+
+        await consumer.start()
+        await asyncio.sleep(0.1)
+        await consumer.stop()
+
+        projection_engine.process.assert_called_once()
+        mock_kafka.commit.assert_called_once()
+
+    async def test_projection_failure_does_not_commit(self, mock_store):
+        event = _make_event()
+        msg = _make_kafka_msg(event.to_kafka_value())
+        projection_engine = MagicMock()
+        projection_engine.process = AsyncMock(side_effect=Exception("projection down"))
+
+        consumer, mock_kafka = self._make_consumer(
+            mock_store,
+            [msg],
+            projection_engine=projection_engine,
+        )
+
+        await consumer.start()
+        await asyncio.sleep(0.1)
+        await consumer.stop()
+
+        mock_store.persist.assert_called_once()
+        projection_engine.process.assert_called_once()
         mock_kafka.commit.assert_not_called()
